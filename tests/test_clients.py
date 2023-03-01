@@ -27,12 +27,12 @@ def test_get_next_timeslice():
 def test_get_missing_intervals():
     length = 10
     ts = 60
-    data = {"tag1": range(0, length)}
+    data = {"tag1": range(length)}
     idx = pd.date_range(
         start="2018-01-18 05:00:00", freq=f"{ts}s", periods=length, name="time"
     )
     df_total = pd.DataFrame(data, index=idx)
-    df = pd.concat([df_total.iloc[0:2], df_total.iloc[3:4], df_total.iloc[8:]])
+    df = pd.concat([df_total.iloc[:2], df_total.iloc[3:4], df_total.iloc[8:]])
     missing = get_missing_intervals(
         df,
         start_time="2018-01-18 05:00:00",

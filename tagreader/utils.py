@@ -32,7 +32,7 @@ def find_registry_key(base_key, search_key_name):
     search_key_name = search_key_name.lower()
     if base_key is not None:
         num_keys, _, _ = winreg.QueryInfoKey(base_key)
-        for i in range(0, num_keys):
+        for i in range(num_keys):
             key_name = winreg.EnumKey(base_key, i)
             if key_name.lower() == search_key_name:
                 return winreg.OpenKey(base_key, key_name)
@@ -49,7 +49,7 @@ def find_registry_key_from_name(base_key, search_key_name):
     search_key_name = search_key_name.lower()
     num_keys, _, _ = winreg.QueryInfoKey(base_key)
     key = key_string = None
-    for i in range(0, num_keys):
+    for i in range(num_keys):
         try:
             key_string = winreg.EnumKey(base_key, i)
             key = winreg.OpenKey(base_key, key_string)
@@ -59,7 +59,7 @@ def find_registry_key_from_name(base_key, search_key_name):
                 if str(key_name).lower() == search_key_name:
                     break
         except Exception as err:
-            logging.error("{}: {}".format(i, err))
+            logging.error(f"{i}: {err}")
     return key, key_string
 
 

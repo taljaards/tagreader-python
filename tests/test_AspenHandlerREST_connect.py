@@ -29,14 +29,13 @@ def Client():
     c.cache = None
     c.connect()
     yield c
-    if os.path.exists(SOURCE + ".h5"):
-        os.remove(SOURCE + ".h5")
+    if os.path.exists(f"{SOURCE}.h5"):
+        os.remove(f"{SOURCE}.h5")
 
 
 @pytest.fixture()
 def AspenHandler():
-    h = AspenHandlerWeb(datasource=SOURCE, verifySSL=verifySSL)
-    yield h
+    yield AspenHandlerWeb(datasource=SOURCE, verifySSL=verifySSL)
 
 
 def test_list_all_aspenone_sources():

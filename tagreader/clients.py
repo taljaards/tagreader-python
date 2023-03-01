@@ -33,15 +33,15 @@ warnings.simplefilter("always", DuplicateTagsWarning)
 
 def list_sources(imstype, url=None, auth=None, verifySSL=None):
     accepted_values = ["piwebapi", "aspenone"]
-    win_accepted_values = ["pi", "aspen", "ip21"]
     if is_windows():
+        win_accepted_values = ["pi", "aspen", "ip21"]
         accepted_values.extend(win_accepted_values)
 
     if imstype is None or imstype.lower() not in accepted_values:
         import platform
         raise ValueError(
             f"Input `imstype` must be one of {accepted_values} when called from {platform.system()} environment.")
-    
+
     if imstype.lower() == "pi":
         return list_pi_sources()
     elif imstype.lower() in ["aspen", "ip21"]:
@@ -203,13 +203,13 @@ def get_handler(
                 "Either switch to Web API ('piwebapi') or install appropriate driver."
             )
         if host is None:
-            hostport = get_server_address_pi(datasource)
-            if not hostport:
+            if hostport := get_server_address_pi(datasource):
+                host, port = hostport
+            else:
                 raise ValueError(
                     f"Unable to locate data source '{datasource}'."
                     "Do you have correct permissions?"
                 )
-            host, port = hostport
         if port is None:
             port = 5450
         return PIHandlerODBC(host=host, port=port, options=options)
@@ -226,13 +226,13 @@ def get_handler(
                 "Either switch to Web API ('aspenone') or install appropriate driver."
             )
         if host is None:
-            hostport = get_server_address_aspen(datasource)
-            if not hostport:
+            if hostport := get_server_address_aspen(datasource):
+                host, port = hostport
+            else:
                 raise ValueError(
                     f"Unable to locate data source '{datasource}'."
                     "Do you have correct permissions?"
                 )
-            host, port = hostport
         if port is None:
             port = 10014
         return AspenHandlerODBC(host=host, port=port, options=options)
@@ -357,34 +357,33 @@ class IMSClient:
                     df = self.handler.read_tag(
                         tag, start, stop, ts, read_type, metadata, get_status
                     )
-                    if len(df.index) > 0:
-                        if (
-                            cache is not None
-                            and read_type
-                            not in [
-                                ReaderType.SNAPSHOT,
-                                ReaderType.RAW,
-                            ]
-                            and not get_status
-                        ):
-                            cache.store(df, read_type, ts)
+                    if len(df.index) > 0 and (
+                        cache is not None
+                        and read_type
+                        not in [
+                            ReaderType.SNAPSHOT,
+                            ReaderType.RAW,
+                        ]
+                        and not get_status
+                    ):
+                        cache.store(df, read_type, ts)
                     frames.append(df)
                     if len(df) < self.handler._max_rows:
                         break
                     start = df.index[-1]
-                # if read_type != ReaderType.RAW:
-                #     time_slice = [start, start]
-                #     while time_slice[1] < stop:
-                #         time_slice = get_next_timeslice(
-                #             time_slice[1], stop, ts, self.handler._max_rows
-                #         )
-                #         df = self.handler.read_tag(
-                #             tag, time_slice[0], time_slice[1], ts, read_type, metadata
-                #         )
-                #         if len(df.index) > 0:
-                #             if cache is not None and read_type != ReaderType.RAW:
-                #                 cache.store(df, read_type, ts)
-                #             frames.append(df)
+                        # if read_type != ReaderType.RAW:
+                        #     time_slice = [start, start]
+                        #     while time_slice[1] < stop:
+                        #         time_slice = get_next_timeslice(
+                        #             time_slice[1], stop, ts, self.handler._max_rows
+                        #         )
+                        #         df = self.handler.read_tag(
+                        #             tag, time_slice[0], time_slice[1], ts, read_type, metadata
+                        #         )
+                        #         if len(df.index) > 0:
+                        #             if cache is not None and read_type != ReaderType.RAW:
+                        #                 cache.store(df, read_type, ts)
+                        #             frames.append(df)
 
             # df = pd.concat(frames, verify_integrity=True)
             df = pd.concat(frames)
@@ -487,24 +486,23 @@ class IMSClient:
         oldtags = tags
         tags = list(dict.fromkeys(tags))
         if len(oldtags) > len(tags):
-            duplicates = set([x for n, x in enumerate(oldtags) if x in oldtags[:n]])
+            duplicates = {x for n, x in enumerate(oldtags) if x in oldtags[:n]}
             warnings.warn(
                 f"Duplicate tags found, removed duplicates: {', '.join(duplicates)}",
                 DuplicateTagsWarning,
             )
-        cols = []
-        for tag in tags:
-            cols.append(
-                self._read_single_tag(
-                    tag,
-                    start_time,
-                    end_time,
-                    ts,
-                    read_type,
-                    get_status,
-                    cache=self.cache,
-                )
+        cols = [
+            self._read_single_tag(
+                tag,
+                start_time,
+                end_time,
+                ts,
+                read_type,
+                get_status,
+                cache=self.cache,
             )
+            for tag in tags
+        ]
         return pd.concat(cols, axis=1)
 
     def query_sql(self, query: str, parse: bool = True):
@@ -516,5 +514,4 @@ class IMSClient:
         Returns:
             Union[pd.DataFrame, pyodbc.Cursor, str]: Return value
         """
-        df_or_cursor = self.handler.query_sql(query=query, parse=parse)
-        return df_or_cursor
+        return self.handler.query_sql(query=query, parse=parse)

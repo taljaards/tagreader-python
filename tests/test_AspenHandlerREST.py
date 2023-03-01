@@ -11,8 +11,7 @@ SAMPLE_TIME = 60
 
 @pytest.fixture()
 def AspenHandler():
-    h = AspenHandlerWeb(datasource="sourcename")
-    yield h
+    yield AspenHandlerWeb(datasource="sourcename")
 
 
 def test_generate_search_query():

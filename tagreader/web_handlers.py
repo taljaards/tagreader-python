@@ -66,8 +66,7 @@ def list_aspenone_sources(url=None, auth=None, verifySSL=None):
     res = requests.get(url_, params=params, auth=auth, verify=verifySSL)
     if res.status_code == 200:
         try:
-            source_list = [r["n"] for r in res.json()["data"] if r["t"] == "IP21"]
-            return source_list
+            return [r["n"] for r in res.json()["data"] if r["t"] == "IP21"]
         except JSONDecodeError:
             print("Did not return json")
     elif res.status_code == 404:
@@ -96,8 +95,7 @@ def list_piwebapi_sources(url=None, auth=None, verifySSL=None):
 
     if res.status_code == 200:
         try:
-            source_list = [r["Name"] for r in res.json()["Items"]]
-            return source_list
+            return [r["Name"] for r in res.json()["Items"]]
         except JSONDecodeError:
             print("Did not return json")
     elif res.status_code == 404:
@@ -141,8 +139,7 @@ class AspenHandlerWeb:
             raise ValueError("Data source is required argument")
         # Aspen Web API expects single space instead of consecutive spaces.
         tag = " ".join(tag.split())
-        params = {"datasource": datasource, "tag": tag, "max": 100, "getTrendable": 0}
-        return params
+        return {"datasource": datasource, "tag": tag, "max": 100, "getTrendable": 0}
 
     def generate_read_query(
         self,
@@ -157,9 +154,6 @@ class AspenHandlerWeb:
         # Maxpoints is used for Actual (raw) and Bestfit (shapepreserving).
         # Probably need to handle this in another way at some point
         maxpoints = self._max_rows
-        stepped = 0
-        outsiders = 0
-
         rt = {
             ReaderType.RAW: 0,
             ReaderType.SHAPEPRESERVING: 2,
@@ -209,8 +203,11 @@ class AspenHandlerWeb:
         if read_type in [ReaderType.RAW, ReaderType.SHAPEPRESERVING]:
             query += f"<X>{maxpoints}</X>"
         if read_type not in [ReaderType.INT, ReaderType.SNAPSHOT]:
+            outsiders = 0
+
             query += f"<O>{outsiders}</O>"
         if read_type not in [ReaderType.RAW]:
+            stepped = 0
             query += f"<S>{stepped}</S>"
         if read_type not in [
             ReaderType.RAW,
@@ -260,10 +257,7 @@ class AspenHandlerWeb:
         res = self.session.get(url, params=params)
         res.raise_for_status()
         j = res.json()
-        for item in j["data"]:
-            if item["n"] == datasource:
-                return True
-        return False
+        return any(item["n"] == datasource for item in j["data"])
 
     def connect(self):
         try:
@@ -320,10 +314,10 @@ class AspenHandlerWeb:
         if "tags" not in j["data"]:
             return {}
 
-        ret = {}
-        for item in j["data"]["tags"][0]["categories"][0]["ta"]:
-            ret[item["m"]] = True if item["d"] == "True" else False
-        return ret
+        return {
+            item["m"]: item["d"] == "True"
+            for item in j["data"]["tags"][0]["categories"][0]["ta"]
+        }
 
     def _get_default_mapname(self, tagname):
         (tagname, _) = self.split_tagmap(tagname)
@@ -368,8 +362,7 @@ class AspenHandlerWeb:
             return ret
 
         r = re.compile(desc)
-        ret = [x for x in ret if r.search(x[1])]
-        return ret
+        return [x for x in ret if r.search(x[1])]
 
     def _get_tag_metadata(self, tag):
         return {}  # FIXME
@@ -385,12 +378,7 @@ class AspenHandlerWeb:
         except Exception:
             print(f"Error. I got this: {j}")
             raise KeyError
-        unit = ""
-        for a in attrdata:
-            if a["g"] == "Units":
-                unit = a["samples"][0]["v"]
-                break
-        return unit
+        return next((a["samples"][0]["v"] for a in attrdata if a["g"] == "Units"), "")
 
     def generate_get_description_query(self, tag):
         tagname, _ = self.split_tagmap(tag)
@@ -527,14 +515,10 @@ class AspenHandlerWeb:
     def initialize_connectionstring(
         self, host=None, port=10014, connection_string=None
     ):
-        if connection_string:
-            self._connection_string = connection_string
-        else:
-            self._connection_string = (
-                f"DRIVER=AspenTech SQLPlus;HOST={host};"
-                f"PORT={port};CHARINT=N;CHARFLOAT=N;"
-                "CHARTIME=N;CONVERTERRORS=N"
-            )
+        self._connection_string = (
+            connection_string
+            or f"DRIVER=AspenTech SQLPlus;HOST={host};PORT={port};CHARINT=N;CHARFLOAT=N;CHARTIME=N;CONVERTERRORS=N"
+        )
 
     def query_sql(self, query: str, parse: bool = True) -> Union[str, pd.DataFrame]:
         url = urljoin(self.base_url, "SQL")
@@ -677,7 +661,7 @@ class PIHandlerWeb:
             params["startTime"] = self._time_to_UTC_string(start_time)
             params["endTime"] = self._time_to_UTC_string(stop_time)
             params["timeZone"] = "UTC"
-        elif read_type == ReaderType.SNAPSHOT and stop_time is not None:
+        elif stop_time is not None:
             params["time"] = self._time_to_UTC_string(stop_time)
             params["timeZone"] = "UTC"
 
@@ -688,7 +672,7 @@ class PIHandlerWeb:
             ReaderType.VAR: "StdDev",
             ReaderType.STD: "StdDev",
             ReaderType.RNG: "Range",
-        }.get(read_type, None)
+        }.get(read_type)
 
         if ReaderType.INT == read_type:
             params["interval"] = f"{seconds}s"
@@ -733,10 +717,7 @@ class PIHandlerWeb:
         res = self.session.get(url)
         res.raise_for_status()
         j = res.json()
-        for item in j["Items"]:
-            if item["Name"] == datasource:
-                return True
-        return False
+        return any(item["Name"] == datasource for item in j["Items"])
 
     def connect(self):
         try:
@@ -777,8 +758,7 @@ class PIHandlerWeb:
         res = self.session.get(url)
         res.raise_for_status()
         j = res.json()
-        unit = j["EngineeringUnits"]
-        return unit
+        return j["EngineeringUnits"]
 
     def _get_tag_description(self, tag):
         webid = self.tag_to_webid(tag)
@@ -788,8 +768,7 @@ class PIHandlerWeb:
         res = self.session.get(url)
         res.raise_for_status()
         j = res.json()
-        description = j["Descriptor"]
-        return description
+        return j["Descriptor"]
 
     def tag_to_webid(self, tag):
         """Given a tag, returns the WebId.
@@ -830,16 +809,14 @@ class PIHandlerWeb:
 
     @staticmethod
     def _is_summary(read_type):
-        if read_type in [
+        return read_type in [
             ReaderType.AVG,
             ReaderType.MIN,
             ReaderType.MAX,
             ReaderType.RNG,
             ReaderType.STD,
             ReaderType.VAR,
-        ]:
-            return True
-        return False
+        ]
 
     def read_tag(
         self,
@@ -897,7 +874,7 @@ class PIHandlerWeb:
         df = df.filter(["Timestamp", "Value", "Good", "Questionable", "Substituted"])
 
         try:
-            if read_type == ReaderType.RAW or read_type == ReaderType.SNAPSHOT:
+            if read_type in [ReaderType.RAW, ReaderType.SNAPSHOT]:
                 # Sub-second timestamps are common
                 df["Timestamp"] = pd.to_datetime(
                     df["Timestamp"], format="%Y-%m-%dT%H:%M:%S.%fZ", utc=True

@@ -12,7 +12,7 @@ def safe_tagname(tagname: str) -> str:
     tagname = tagname.replace(".", "_")
     tagname = "".join(c for c in tagname if c.isalnum() or c == "_").strip()
     if tagname[0].isnumeric():
-        tagname = "_" + tagname  # Conform to NaturalName
+        tagname = f"_{tagname}"
     return tagname
 
 
@@ -63,15 +63,7 @@ class BucketCache:
             endtime_epoch = timestamp_to_epoch(endtime)
             timespan = f"/_{starttime_epoch}_{endtime_epoch}"
 
-        keyval = (
-            f"/{tagname}"
-            f"/{readtype.name}"
-            f"{(ts is not None and readtype != ReaderType.RAW) * f'/s{ts}'}"
-            f"{stepped * '/stepped'}"
-            f"{status * '/status'}"
-            f"{timespan}"
-        )
-        return keyval
+        return f"/{tagname}/{readtype.name}{(ts is not None and readtype != ReaderType.RAW) * f'/s{ts}'}{stepped * '/stepped'}{status * '/status'}{timespan}"
 
     def store_tag_metadata(
         self, tagname: str, metadata: Dict[str, Union[str, int]]
@@ -148,7 +140,7 @@ class BucketCache:
         name: str,
     ) -> Tuple[pd.Timestamp, pd.Timestamp]:
         name_with_times = name.split("/")[-1]
-        if not name_with_times.count("_") == 2:
+        if name_with_times.count("_") != 2:
             return (None, None)
         _, starttime_epoch, endtime_epoch = name_with_times.split("_")
         starttime = pd.to_datetime(int(starttime_epoch), unit="s").tz_localize("UTC")
@@ -199,7 +191,7 @@ class BucketCache:
         missing_intervals = [(starttime, endtime)]
         for dataset in datasets:
             b = self._get_intervals_from_dataset_name(dataset)
-            for _ in range(0, len(missing_intervals)):
+            for _ in range(len(missing_intervals)):
                 r = missing_intervals.pop(0)
                 if b[1] < r[0] or b[0] > r[1]:
                     # No overlap
@@ -211,10 +203,10 @@ class BucketCache:
                     # The bucket splits the interval in two
                     missing_intervals.append((r[0], b[0]))
                     missing_intervals.append((b[1], r[1]))
-                elif b[0] <= r[0] and r[0] <= b[1] < r[1]:
+                elif b[0] <= r[0]:
                     # The bucket chomps the start of the interval
                     missing_intervals.append((b[1], r[1]))
-                elif r[0] < b[0] <= r[1] and b[1] >= r[1]:
+                else:
                     # The bucket chomps the end of the interval
                     missing_intervals.append((r[0], b[0]))
         return missing_intervals
@@ -284,19 +276,18 @@ class SmartCache:
         name = list(df)[0] if isinstance(df, pd.DataFrame) else df
         name = safe_tagname(name)
         ts = int(ts.total_seconds()) if isinstance(ts, pd.Timedelta) else ts
-        if readtype != ReaderType.RAW:
-            if ts is None:
+        if readtype == ReaderType.RAW:
+            return f"{readtype.name}/{name}"
+        if ts is None:
                 # Determine sample time by reading interval between first two
                 # samples of dataframe.
-                if isinstance(df, pd.DataFrame):
-                    interval = int(df[0:2].index.to_series().diff().mean().value / 1e9)
-                else:
-                    raise TypeError
+            if isinstance(df, pd.DataFrame):
+                interval = int(df[:2].index.to_series().diff().mean().value / 1e9)
             else:
-                interval = int(ts)
-            return f"{readtype.name}/s{interval}/{name}"
+                raise TypeError
         else:
-            return f"{readtype.name}/{name}"
+            interval = int(ts)
+        return f"{readtype.name}/s{interval}/{name}"
 
     def store(
         self,
@@ -336,10 +327,7 @@ class SmartCache:
         wheretxt = " and ".join(where)
         with pd.HDFStore(self.filename, mode="r") as f:
             if key in f:
-                if wheretxt:
-                    df = f.select(key, where=wheretxt)
-                else:
-                    df = f.select(key)
+                df = f.select(key, where=wheretxt) if wheretxt else f.select(key)
         return df.sort_index()
 
     def store_tag_metadata(
@@ -388,9 +376,7 @@ class SmartCache:
             )  # if isinstance(rt, ReaderType) always returns False...?
 
         def timedelta_to_str(t):  # type: ignore
-            if isinstance(t, pd.Timedelta):
-                return str(int(t.total_seconds()))
-            return t
+            return str(int(t.total_seconds())) if isinstance(t, pd.Timedelta) else t
 
         key = "/" + key.lstrip("/")  # Ensure absolute path
         readtype = readtype if isinstance(readtype, list) else [readtype]
@@ -412,10 +398,7 @@ class SmartCache:
         if elements[1] not in ts and ts[0] is not None:
             # print(f"{elements[1]} not in {ts}")
             return False
-        if elements[2] not in tagname and tagname[0] is not None:
-            # print(f"{elements[2]} not in {tagname}")
-            return False
-        return True
+        return elements[2] in tagname or tagname[0] is None
 
     def delete_key(
         self,
@@ -429,5 +412,4 @@ class SmartCache:
                     f.remove(key)
 
     def _get_hdfstore(self, mode: str = "r") -> pd.HDFStore:
-        f = pd.HDFStore(self.filename, mode)
-        return f
+        return pd.HDFStore(self.filename, mode)

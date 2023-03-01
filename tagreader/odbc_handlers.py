@@ -34,15 +34,12 @@ def list_pi_servers():
 
 
 def list_aspen_sources():
-    source_list = []
     reg_adsa = winreg.OpenKey(
         winreg.HKEY_CURRENT_USER,
         r"Software\AspenTech\ADSA\Caches\AspenADSA\\" + os.getlogin(),
     )
     num_sources, _, _ = winreg.QueryInfoKey(reg_adsa)
-    for i in range(0, num_sources):
-        source_list.append(winreg.EnumKey(reg_adsa, i))
-    return source_list
+    return [winreg.EnumKey(reg_adsa, i) for i in range(num_sources)]
 
 
 def list_pi_sources():
@@ -56,8 +53,7 @@ def list_pi_sources():
         reg_key = find_registry_key(reg_key, "ServerHandles")
     if reg_key is not None:
         num_sources, _, _ = winreg.QueryInfoKey(reg_key)
-        for i in range(0, num_sources):
-            source_list.append(winreg.EnumKey(reg_key, i))
+        source_list.extend(winreg.EnumKey(reg_key, i) for i in range(num_sources))
     return source_list
 
 
@@ -111,12 +107,9 @@ class AspenHandlerODBC:
             seconds = int(sample_time.total_seconds())
             if read_type == ReaderType.SAMPLED:
                 seconds = 0
-            else:
-                if seconds <= 0:
-                    raise NotImplementedError
-                    # sample_time = (stop_time-start_time).totalseconds
-
-        timecast_format_query = "%Y-%m-%dT%H:%M:%SZ"  # 05-jan-18 14:00:00
+            elif seconds <= 0:
+                raise NotImplementedError
+                # sample_time = (stop_time-start_time).totalseconds
 
         request_num = {
             ReaderType.SAMPLED: 4,  # VALUES request (actual recorded data), history  # noqa: E501
@@ -135,7 +128,7 @@ class AspenHandlerODBC:
             ReaderType.SAMPLED: "history",
             ReaderType.SHAPEPRESERVING: "history",
             ReaderType.INT: "history",
-            ReaderType.SNAPSHOT: '"' + str(tag) + '"',
+            ReaderType.SNAPSHOT: f'"{str(tag)}"',
         }.get(read_type, "aggregates")
         # For RAW: historyevent?
         # Ref https://help.sap.com/saphelp_pco151/helpdata/en/4c/72e34ee631469ee10000000a15822d/content.htm?no_cache=true  # noqa: E501
@@ -171,6 +164,8 @@ class AspenHandlerODBC:
         query.extend([f"FROM {from_column}"])
 
         if ReaderType.SNAPSHOT != read_type:
+            timecast_format_query = "%Y-%m-%dT%H:%M:%SZ"  # 05-jan-18 14:00:00
+
             start = start_time.strftime(timecast_format_query)
             stop = stop_time.strftime(timecast_format_query)
             query.extend([f"WHERE name = {tag!r}"])
@@ -256,22 +251,25 @@ class AspenHandlerODBC:
         self.cursor.execute(query)
         colnames = [col[0] for col in self.cursor.description]
         rows = self.cursor.fetchall()
-        mapdefs = [dict(zip(colnames, row)) for row in rows]
-        return mapdefs
+        return [dict(zip(colnames, row)) for row in rows]
 
     def _get_specific_mapdef(self, tagname, mapping):
         mapdefs = self._get_mapdefs(tagname)
-        for mapdef in mapdefs:
-            if mapdef["NAME"].lower() == mapping.lower():
-                return mapdef
-        return None
+        return next(
+            (
+                mapdef
+                for mapdef in mapdefs
+                if mapdef["NAME"].lower() == mapping.lower()
+            ),
+            None,
+        )
 
     def _get_default_mapdef(self, tagname):
         mapdefs = self._get_mapdefs(tagname)
-        for mapdef in mapdefs:
-            if mapdef["MAP_IsDefault"] == "TRUE":
-                return mapdef
-        return None
+        return next(
+            (mapdef for mapdef in mapdefs if mapdef["MAP_IsDefault"] == "TRUE"),
+            None,
+        )
 
     def search(self, tag=None, desc=None):
         if tag is None:
@@ -298,8 +296,7 @@ class AspenHandlerODBC:
             if r[0] is not None:
                 description = r[0]
             res.append((tagname, description))
-        res = list(set(res))
-        return res
+        return list(set(res))
 
     def _get_tag_metadata(self, tag):
         return None
@@ -345,7 +342,7 @@ class AspenHandlerODBC:
         get_status=False,
     ):
         (cleantag, mapping) = tag.split(";") if ";" in tag else (tag, None)
-        mapdef = dict()
+        mapdef = {}
 
         if mapping is not None:
             mapdef = self._get_specific_mapdef(cleantag, mapping)
@@ -458,12 +455,6 @@ class PIHandlerODBC:
             seconds = int(sample_time.total_seconds())
             if ReaderType.SAMPLED == read_type:
                 seconds = 0
-            else:
-                if seconds <= 0:
-                    pass  # Fixme: Not implemented
-                    # sample_time = (stop_time-start_time).totalseconds
-
-        timecast_format_query = "%d-%b-%y %H:%M:%S"  # 05-jan-18 14:00:00
         # timecast_format_output = "yyyy-MM-dd HH:mm:ss"
 
         source = {
@@ -503,6 +494,7 @@ class PIHandlerODBC:
         query.extend([f"time FROM {source} WHERE tag='{tag}'"])  # __utctime also works
 
         if ReaderType.SNAPSHOT != read_type:
+            timecast_format_query = "%d-%b-%y %H:%M:%S"  # 05-jan-18 14:00:00
             start = start_time.strftime(timecast_format_query)
             stop = stop_time.strftime(timecast_format_query)
             query.extend([f"AND (time BETWEEN '{start}' AND '{stop}')"])
@@ -551,8 +543,7 @@ class PIHandlerODBC:
         if res is None:
             warnings.warn(f"Tag {tag} not found")
             return None
-        metadata = dict(zip(col_names, res))
-        return metadata
+        return dict(zip(col_names, res))
 
     def _get_tag_description(self, tag):
         query = f"SELECT descriptor FROM pipoint.pipoint2 WHERE tag='{tag}'"
@@ -568,16 +559,14 @@ class PIHandlerODBC:
 
     @staticmethod
     def _is_summary(read_type):
-        if read_type in [
+        return read_type in [
             ReaderType.AVG,
             ReaderType.MIN,
             ReaderType.MAX,
             ReaderType.RNG,
             ReaderType.STD,
             ReaderType.VAR,
-        ]:
-            return True
-        return False
+        ]
 
     def read_tag(
         self,
