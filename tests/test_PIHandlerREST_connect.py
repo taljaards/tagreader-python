@@ -141,7 +141,7 @@ def test_read(Client, read_type, size):
     elif read_type in "RAW":
         # Weirdness for test-tag which can have two different results,
         # apparently depending on the day of the week, mood, lunar cycle...
-        assert df.shape == (size, 1) or df.shape == (size - 1, 1)
+        assert df.shape in [(size, 1), (size - 1, 1)]
         assert df.index[0] >= ensure_datetime_with_tz(START_TIME)
         assert df.index[-1] <= ensure_datetime_with_tz(STOP_TIME)
 

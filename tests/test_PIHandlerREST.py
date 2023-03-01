@@ -209,4 +209,4 @@ def test_genreadquery_long_sampletime(PIHandler):
         ts,
         ReaderType.INT,
     )
-    assert params["interval"] == f"{86410}s"
+    assert params["interval"] == '86410s'

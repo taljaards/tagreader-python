@@ -68,8 +68,7 @@ for more information.
 
 def get_install_requirements() -> List[str]:
     with open("requirements.in") as f:
-        requirements = f.read().splitlines()
-        return requirements
+        return f.read().splitlines()
 
 
 setup(

@@ -16,13 +16,15 @@ os.environ["NUMEXPR_MAX_THREADS"] = "8"
 @pytest.fixture()
 def data():
     length = 10
-    df_total = pd.DataFrame(
-        {"tag1": range(0, length)},
+    yield pd.DataFrame(
+        {"tag1": range(length)},
         index=pd.date_range(
-            start="2018-01-18 05:00:00", freq="60s", periods=length, name="time"
+            start="2018-01-18 05:00:00",
+            freq="60s",
+            periods=length,
+            name="time",
         ),
     )
-    yield df_total
 
 
 @pytest.fixture()
@@ -47,7 +49,7 @@ def test_cache_single_store_and_fetch(cache, data):
 
 
 def test_cache_multiple_store_single_fetch(cache, data):
-    df1 = data[0:3]
+    df1 = data[:3]
     df2 = data[2:10]
     cache.store(df1, readtype=ReaderType.INT)
     cache.store(df2, readtype=ReaderType.INT)
@@ -189,7 +191,7 @@ def test_to_DST_skips_time(cache):
         name="time",
     )
     index.freq = None
-    df = pd.DataFrame({"tag1": range(0, len(index))}, index=index)
+    df = pd.DataFrame({"tag1": range(len(index))}, index=index)
     assert (
         df.loc["2018-03-25 01:50:00":"2018-03-25 03:10:00"].size == (2 + 1 * 6 + 1) - 6
     )
@@ -207,7 +209,7 @@ def test_from_DST_folds_time(cache):
         name="time",
     )
     index.freq = None
-    df = pd.DataFrame({"tag1": range(0, len(index))}, index=index)
+    df = pd.DataFrame({"tag1": range(len(index))}, index=index)
     assert len(df) == (4 + 1) * 6 + 1
     # Time exists inside fold:
     assert (

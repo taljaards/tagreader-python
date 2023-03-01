@@ -19,7 +19,7 @@ FREQ = f"{TS}s"
 STARTTIME_1 = pd.to_datetime("2020-01-01 12:00:00", utc=True)
 ENDTIME_1 = pd.to_datetime("2020-01-01 13:00:00", utc=True)
 idx = pd.date_range(start=STARTTIME_1, end=ENDTIME_1, freq=FREQ, name="time")
-DF1 = pd.DataFrame({TAGNAME: range(0, len(idx))}, index=idx)
+DF1 = pd.DataFrame({TAGNAME: range(len(idx))}, index=idx)
 
 STARTTIME_1_EPOCH = (
     STARTTIME_1 - pd.to_datetime("1970-01-01", utc=True)
@@ -33,7 +33,7 @@ ENDTIME_1_EPOCH = (ENDTIME_1 - pd.to_datetime("1970-01-01", utc=True)) // pd.Tim
 STARTTIME_2 = pd.to_datetime("2020-01-01 13:30:00", utc=True)
 ENDTIME_2 = pd.to_datetime("2020-01-01 14:00:00", utc=True)
 idx = pd.date_range(start=STARTTIME_2, end=ENDTIME_2, freq=FREQ, name="time")
-DF2 = pd.DataFrame({TAGNAME: range(0, len(idx))}, index=idx)
+DF2 = pd.DataFrame({TAGNAME: range(len(idx))}, index=idx)
 
 ENDTIME_2_EPOCH = (ENDTIME_2 - pd.to_datetime("1970-01-01", utc=True)) // pd.Timedelta(
     "1s"
@@ -43,7 +43,7 @@ ENDTIME_2_EPOCH = (ENDTIME_2 - pd.to_datetime("1970-01-01", utc=True)) // pd.Tim
 STARTTIME_3 = pd.to_datetime("2020-01-01 12:40:00", utc=True)
 ENDTIME_3 = pd.to_datetime("2020-01-01 13:40:00", utc=True)
 idx = pd.date_range(start=STARTTIME_3, end=ENDTIME_3, freq=FREQ, name="time")
-DF3 = pd.DataFrame({TAGNAME: range(0, len(idx))}, index=idx)
+DF3 = pd.DataFrame({TAGNAME: range(len(idx))}, index=idx)
 
 
 @pytest.fixture(autouse=True)
